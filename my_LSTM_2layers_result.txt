@@ -1,0 +1,70 @@
+C:\anaconda\envs\pytorch\python.exe C:/Users/Alienware/Desktop/courses/自然语言处理/LSTM/my_LSTMLM.py
+print parameter ......
+n_step: 5
+n_hidden: 128
+batch_size: 128
+learn_rate: 0.0005
+all_epoch: 5
+emb_size: 256
+save_checkpoint_epoch: 5
+train_data: penn_small
+The size of the dictionary is: 7615
+generating train_batch ......
+The number of the train batch is: 603
+
+Train the LSTMLM……………………
+TextLSTM(
+  (C): Embedding(7615, 256)
+  (gate_l1): Linear(in_features=384, out_features=128, bias=True)
+  (gate_l2): Linear(in_features=256, out_features=128, bias=True)
+  (sigmoid): Sigmoid()
+  (tanh): Tanh()
+  (model): Linear(in_features=128, out_features=7615, bias=True)
+  (softmax): LogSoftmax(dim=1)
+)
+Epoch: 0001 Batch: 100 /603 loss = 6.568314 ppl = 712.168
+Epoch: 0001 Batch: 200 /603 loss = 6.431719 ppl = 621.241
+Epoch: 0001 Batch: 300 /603 loss = 6.603823 ppl = 737.911
+Epoch: 0001 Batch: 400 /603 loss = 6.885671 ppl = 978.158
+Epoch: 0001 Batch: 500 /603 loss = 6.427773 ppl = 618.795
+Epoch: 0001 Batch: 600 /603 loss = 6.553238 ppl = 701.512
+Epoch: 0001 Batch: 604 /603 loss = 6.063983 ppl = 430.085
+Valid 5504 samples after epoch: 0001 loss = 6.423188 ppl = 615.964
+Epoch: 0002 Batch: 100 /603 loss = 6.262923 ppl = 524.75
+Epoch: 0002 Batch: 200 /603 loss = 6.179771 ppl = 482.881
+Epoch: 0002 Batch: 300 /603 loss = 6.389292 ppl = 595.435
+Epoch: 0002 Batch: 400 /603 loss = 6.655775 ppl = 777.26
+Epoch: 0002 Batch: 500 /603 loss = 6.257059 ppl = 521.682
+Epoch: 0002 Batch: 600 /603 loss = 6.342594 ppl = 568.269
+Epoch: 0002 Batch: 604 /603 loss = 5.848267 ppl = 346.633
+Valid 5504 samples after epoch: 0002 loss = 6.325488 ppl = 558.63
+Epoch: 0003 Batch: 100 /603 loss = 6.113261 ppl = 451.81
+Epoch: 0003 Batch: 200 /603 loss = 6.031515 ppl = 416.345
+Epoch: 0003 Batch: 300 /603 loss = 6.192319 ppl = 488.979
+Epoch: 0003 Batch: 400 /603 loss = 6.524487 ppl = 681.63
+Epoch: 0003 Batch: 500 /603 loss = 6.127341 ppl = 458.216
+Epoch: 0003 Batch: 600 /603 loss = 6.203482 ppl = 494.468
+Epoch: 0003 Batch: 604 /603 loss = 5.662729 ppl = 287.933
+Valid 5504 samples after epoch: 0003 loss = 6.239733 ppl = 512.722
+Epoch: 0004 Batch: 100 /603 loss = 5.964661 ppl = 389.421
+Epoch: 0004 Batch: 200 /603 loss = 5.901274 ppl = 365.503
+Epoch: 0004 Batch: 300 /603 loss = 6.055052 ppl = 426.261
+Epoch: 0004 Batch: 400 /603 loss = 6.390315 ppl = 596.044
+Epoch: 0004 Batch: 500 /603 loss = 6.019199 ppl = 411.249
+Epoch: 0004 Batch: 600 /603 loss = 6.086950 ppl = 440.077
+Epoch: 0004 Batch: 604 /603 loss = 5.514721 ppl = 248.321
+Valid 5504 samples after epoch: 0004 loss = 6.177233 ppl = 481.657
+Epoch: 0005 Batch: 100 /603 loss = 5.841227 ppl = 344.201
+Epoch: 0005 Batch: 200 /603 loss = 5.755919 ppl = 316.056
+Epoch: 0005 Batch: 300 /603 loss = 5.937781 ppl = 379.093
+Epoch: 0005 Batch: 400 /603 loss = 6.272599 ppl = 529.853
+Epoch: 0005 Batch: 500 /603 loss = 5.929007 ppl = 375.781
+Epoch: 0005 Batch: 600 /603 loss = 5.974844 ppl = 393.407
+Epoch: 0005 Batch: 604 /603 loss = 5.393401 ppl = 219.95
+Valid 5504 samples after epoch: 0005 loss = 6.125458 ppl = 457.354
+
+Test the LSTMLM……………………
+Test 6528 samples with models/LSTMlm_model_epoch5.ckpt……………………
+loss = 6.058210 ppl = 427.609
+
+进程已结束，退出代码为 0
