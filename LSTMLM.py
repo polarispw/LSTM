@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import give_valid_test
+import _pickle as cpickle
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cpu")
 
 def make_batch(train_path, word2number_dict, batch_size, n_step):
     all_input_batch = []
@@ -66,86 +68,27 @@ class TextLSTM(nn.Module):
     def __init__(self):
         super(TextLSTM, self).__init__()
         self.C = nn.Embedding(n_class, embedding_dim=emb_size)
-        # self.LSTM = nn.LSTM(input_size=emb_size, hidden_size=n_hidden)
+        self.LSTM = nn.LSTM(input_size=emb_size, hidden_size=n_hidden)
         self.W = nn.Linear(n_hidden, n_class, bias=False)
         self.b = nn.Parameter(torch.ones([n_class]))
 
-    def LSTM_layer(self, input, initial_states, w_ih, w_hh, b_ih, b_hh):
-        h0, c0 = initial_states
-        batch_size, T, i_size = input.shape
-        h_size = w_ih.shape[0] // 4
-        pre_h = h0
-        pre_c = c0
-
-        batch_w_ih = w_ih.unsqueeze(0).tile(batch_size, 1, 1)
-        batch_w_hh = w_hh.unsqueeze(0).tile(batch_size, 1, 1)
-
-        output_size = h_size
-        output = torch.zeros(batch_size, T, output_size).to(device)
-
-        for t in range(T):
-            x = input[:, t, :]
-
-            w_times_x = torch.bmm(batch_w_ih,x.unsqueeze(-1))
-            w_times_x = w_times_x.squeeze(-1)
-            w_times_pre_h = torch.bmm(batch_w_hh, pre_h.unsqueeze(-1))
-            w_times_pre_h = w_times_pre_h.squeeze(-1)
-
-            # 输入门
-            i_t = torch.sigmoid(w_times_x[:, : h_size] + w_times_pre_h[:, : h_size] + b_ih[:h_size] + b_hh[:h_size])
-            # 遗忘门
-            f_t = torch.sigmoid(w_times_x[:,h_size : 2*h_size] + w_times_pre_h[:,h_size : 2*h_size] + b_ih[h_size : 2*h_size] + b_hh[h_size : 2*h_size])
-            # 记忆门
-            g_t = torch.tanh(w_times_x[:,2*h_size : 3*h_size] + w_times_pre_h[:,2*h_size : 3*h_size] + b_ih[2*h_size : 3*h_size] + b_hh[2*h_size : 3*h_size])
-            # 输出门
-            o_t = torch.sigmoid(w_times_x[:,3*h_size :] + w_times_pre_h[:,3*h_size :] + b_ih[3*h_size :] + b_hh[3*h_size :])
-
-            pre_c = f_t * pre_c +i_t * g_t
-            pre_h = o_t * torch.tanh(pre_c)
-            output[:, t, :] = pre_h
-
-        return output, (pre_h, pre_c)
-
-    def My_LSTM(self, input, input_size, hidden_size, num_layers = 1, bidirectional=False):
-        direction = 2 if bidirectional else 1
-
-        h_0 = torch.zeros(num_layers*direction, len(input), hidden_size).to(device)
-        c_0 = torch.zeros(num_layers*direction, len(input), hidden_size).to(device)
-
-        K = torch.sqrt(torch.tensor(1 / hidden_size))
-        w_ih = torch.mul(K, torch.rand(4 * hidden_size, input_size)).to(device)
-        w_hh = torch.mul(K, torch.rand(4 * hidden_size, hidden_size)).to(device)
-        b_ih = torch.mul(K, torch.rand(4 * hidden_size)).to(device)
-        b_hh = torch.mul(K, torch.rand(4 * hidden_size)).to(device)
-        w_ih.requires_grad = True
-        w_hh.requires_grad = True
-        b_ih.requires_grad = True
-        b_hh.requires_grad = True
-
-        output = torch.zeros(input.shape[0], input.shape[1], direction * input.shape[2]).to(device)
-        h_n = torch.zeros(num_layers * direction, input.shape[0], hidden_size).to(device)
-        c_n = torch.zeros(num_layers * direction, input.shape[0], hidden_size).to(device)
-        if(num_layers == 1):
-            output, (h_n[0, :, :], c_n[0, :, :]) = self.LSTM_layer(input, (h_0[0, :, :],c_0[0, :, :]),
-                                                                   w_ih, w_hh, b_ih, b_hh)
-            return output, (h_n, c_n)
-
-
     def forward(self, X):
-        X = self.C(X) # X : [batch_size, n_step, embeding size]
+        X = self.C(X)
+
         # hidden_state = torch.zeros(1, len(X), n_hidden)  # [num_layers(=1) * num_directions(=1), batch_size, n_hidden]
         # cell_state = torch.zeros(1, len(X), n_hidden)     # [num_layers(=1) * num_directions(=1), batch_size, n_hidden]
-        # X = X.transpose(0, 1)  # X : [n_step, batch_size, embeding size]
-        # outputs, (_, _) = self.LSTM(X, (hidden_state, cell_state))
 
-        outputs, (_, _) = self.My_LSTM(X, emb_size, n_hidden)
+        X = X.transpose(0, 1) # X : [n_step, batch_size, embeding size]
+
+        # outputs, (_, _) = self.LSTM(X, (hidden_state, cell_state))
+        outputs, (_, _) = self.LSTM(X)
         # outputs : [n_step, batch_size, num_directions(=1) * n_hidden]
         # hidden : [num_layers(=1) * num_directions(=1), batch_size, n_hidden]
         outputs = outputs[-1] # [batch_size, num_directions(=1) * n_hidden]
         model = self.W(outputs) + self.b # model : [batch_size, n_class]
         return model
 
-def train():
+def train_LSTMlm():
     model = TextLSTM()
     model.to(device)
     print(model)
@@ -199,7 +142,7 @@ def train():
         if (epoch+1) % save_checkpoint_epoch == 0:
             torch.save(model, f'models/LSTMlm_model_epoch{epoch+1}.ckpt')
 
-def test(select_model_path):
+def test_LSTMlm(select_model_path):
     model = torch.load(select_model_path, map_location="cpu")  #load the selected model
     model.to(device)
 
@@ -261,9 +204,9 @@ if __name__ == '__main__':
     all_input_batch = all_input_batch.reshape(-1, batch_size, n_step)
     all_target_batch = all_target_batch.reshape(-1, batch_size)
 
-    print("\nTrain the LSTM……………………")
-    train()
+    print("\nTrain the LSTMLM……………………")
+    train_LSTMlm()
 
-    print("\nTest the LSTM……………………")
+    print("\nTest the LSTMLM……………………")
     select_model_path = "models/LSTMlm_model_epoch5.ckpt"
-    test(select_model_path)
+    test_LSTMlm(select_model_path)
