@@ -1,6 +1,5 @@
 import os
 import math
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,7 +7,7 @@ import give_valid_test
 import _pickle as cpickle
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#device = torch.device("cpu")
+# device = torch.device("cpu")
 
 def make_batch(train_path, word2number_dict, batch_size, n_step):
     all_input_batch = []
@@ -40,7 +39,7 @@ def make_batch(train_path, word2number_dict, batch_size, n_step):
 
     return all_input_batch, all_target_batch # (batch num, batch size, n_step) (batch num, batch size)
 
-def make_dict(train_path):#构建训练数据字典
+def make_dict(train_path):
     text = open(train_path, 'r', encoding='utf-8')  #open the train file
     word_list = set()  # a set for making dict
 
@@ -69,37 +68,24 @@ class TextLSTM(nn.Module):
     def __init__(self):
         super(TextLSTM, self).__init__()
         self.C = nn.Embedding(n_class, embedding_dim=emb_size)
-        self.cell_size=n_hidden
-        self.gate = nn.Linear(emb_size + n_hidden, self.cell_size)
-        self.sigmoid = nn.Sigmoid()
-        self.tanh = nn.Tanh()
+        self.LSTM = nn.LSTM(input_size=emb_size, hidden_size=n_hidden, num_layers=2, bidirectional=True)
+        self.W = nn.Linear(n_hidden, n_class, bias=False)
+        self.b = nn.Parameter(torch.ones([n_class]))
 
-        self.model = nn.Linear(n_hidden, n_class)
-        self.softmax = nn.LogSoftmax(dim=1)
+    def forward(self, X):
+        X = self.C(X)
 
-    def lstm_cell(self,x,hidden,cell):
-        combined = torch.cat((hidden, x), 0)# 拼接数据
-        f_gate = self.sigmoid(self.gate(combined))  # 遗忘门
-        i_gate = self.sigmoid(self.gate(combined))  # 输入门
-        c_t = self.tanh(self.gate(combined))
-        cell = torch.add(torch.mul(f_gate, cell), torch.mul(i_gate, c_t))# 记忆更新
-        o_gate = self.sigmoid(self.gate(combined))  # 输出门
-        hidden = torch.mul(self.tanh(cell), o_gate)
-        return hidden, cell
+        # hidden_state = torch.zeros(1, len(X), n_hidden)  # [num_layers(=1) * num_directions(=1), batch_size, n_hidden]
+        # cell_state = torch.zeros(1, len(X), n_hidden)     # [num_layers(=1) * num_directions(=1), batch_size, n_hidden]
 
-    def forward(self, input):
-        input=self.C(input)
-        h=torch.zeros(n_hidden).cuda()
-        c=torch.zeros(self.cell_size).cuda()
-        outputs=torch.zeros(1,n_hidden).cuda()
-        for X in input:
-            for x in X:
-              h,c=self.lstm_cell(x,h,c)
-              h_t=torch.unsqueeze(h,0)
-            outputs=torch.cat((outputs,h_t),0)
-        outputs=outputs[torch.arange(outputs.size(0))!=0]
-        model=self.softmax(self.model(outputs))
-        #model=self.model(outputs)
+        X = X.transpose(0, 1) # X : [n_step, batch_size, embeding size]
+
+        # outputs, (_, _) = self.LSTM(X, (hidden_state, cell_state))
+        outputs, (_, _) = self.LSTM(X)
+        # outputs : [n_step, batch_size, num_directions(=1) * n_hidden]
+        # hidden : [num_layers(=1) * num_directions(=1), batch_size, n_hidden]
+        outputs = outputs[-1] # [batch_size, num_directions(=1) * n_hidden]
+        model = self.W(outputs) + self.b # model : [batch_size, n_class]
         return model
 
 def train_LSTMlm():
@@ -156,7 +142,7 @@ def train_LSTMlm():
         if (epoch+1) % save_checkpoint_epoch == 0:
             torch.save(model, f'models/LSTMlm_model_epoch{epoch+1}.ckpt')
 
-def test_LSTMlm(select_model_path):#测试评估
+def test_LSTMlm(select_model_path):
     model = torch.load(select_model_path, map_location="cpu")  #load the selected model
     model.to(device)
 
