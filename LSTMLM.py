@@ -67,32 +67,34 @@ class TextLSTM(nn.Module):
         super().__init__()
         self.C = nn.Embedding(n_class, embedding_dim=emb_size)
         # self.LSTM = nn.LSTM(input_size=emb_size, hidden_size=n_hidden)
-        self.hidden_size = n_hidden
         self.input_size = emb_size
+        self.hidden_size = n_hidden
+        self.num_layers = 2
         self.bidirectional = False
         self.D = 2 if self.bidirectional else 1
         K = torch.sqrt(torch.tensor(1 / self.hidden_size))
-        d = max(self.D * self.hidden_size, self.input_size)
 
-        self.w_ih0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, d)), requires_grad=True)
+        self.w_ih0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, self.input_size)), requires_grad=True)
         self.w_hh0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, self.hidden_size)), requires_grad=True)
         self.b_ih0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
         self.b_hh0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
-
-        self.w_ih1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, d)), requires_grad=True)
-        self.w_hh1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, self.hidden_size)), requires_grad=True)
-        self.b_ih1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
-        self.b_hh1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
+        # 我知道用这个东西很粗糙 但是管用
+        for i in range(1, self.num_layers):
+            exec("self.w_ih%s = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, self.D*self.hidden_size)), requires_grad=True)"% i)
+            exec("self.w_hh%s = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, self.hidden_size)), requires_grad=True)" % i)
+            exec("self.b_ih%s = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)" % i)
+            exec("self.b_hh%s = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)" % i)
 
         if self.bidirectional:
             self.w_ih_r0 = self.w_ih0
             self.w_hh_r0 = self.w_hh0
             self.b_ih_r0 = self.b_ih0
             self.b_hh_r0 = self.b_hh0
-            self.w_ih_r1 = self.w_ih1
-            self.w_hh_r1 = self.w_hh1
-            self.b_ih_r1 = self.b_ih1
-            self.b_hh_r1 = self.b_hh1
+            for i in range(1, self.num_layers):
+                exec("self.w_ih_r%s = self.w_ih%s" %(i,i))
+                exec("self.w_hh_r%s = self.w_hh%s" %(i,i))
+                exec("self.b_ih_r%s = self.b_ih%s" %(i,i))
+                exec("self.b_hh_r%s = self.b_hh%s" %(i,i))
 
         self.W = nn.Linear(n_hidden, n_class, bias=False) # 如果要用双向 这里维度要修改
         self.b = nn.Parameter(torch.ones([n_class]))
@@ -139,7 +141,7 @@ class TextLSTM(nn.Module):
         c_0 = torch.zeros(num_layers * D, len(input), hidden_size).to(device)
 
         output0 = torch.zeros(input.shape[0], input.shape[1], D * hidden_size).to(device)
-        output1 = torch.zeros(input.shape[0], input.shape[1], D * hidden_size).to(device)
+        output_list = []
                 # [num_layers, batch_size, seq_len, D*hidden_size]
         h_n = torch.zeros(num_layers * D, input.shape[0], hidden_size).to(device)
         c_n = torch.zeros(num_layers * D, input.shape[0], hidden_size).to(device)
@@ -147,25 +149,28 @@ class TextLSTM(nn.Module):
         for k in range(0, num_layers):
             if k==0:
                 output0[:, :, :hidden_size], (h_n[k, :, :], c_n[k, :, :]) = \
-                    self.LSTM_layer(input, (h_0[k, :, :],c_0[k, :, :]), self.w_ih0[:,:input_size], self.w_hh0, self.b_ih0, self.b_hh0)
+                    self.LSTM_layer(input, (h_0[k, :, :],c_0[k, :, :]), self.w_ih0, self.w_hh0, self.b_ih0, self.b_hh0)
                 if bidirectional:
                     output0[:, :, hidden_size:], (h_n[k+1, :, :], c_n[k+1, :, :]) = \
-                        self.LSTM_layer(torch.flip(input, [1]), (h_0[k+1, :, :], c_0[k+1, :, :]), self.w_ih_r0[:,:input_size], self.w_hh_r0, self.b_ih_r0, self.b_hh_r0)
+                        self.LSTM_layer(torch.flip(input, [1]), (h_0[k+1, :, :], c_0[k+1, :, :]), self.w_ih_r0, self.w_hh_r0, self.b_ih_r0, self.b_hh_r0)
+                output_list.append(output0)
             else:
-                output1[:, :, :hidden_size], (h_n[k*D, :, :], c_n[k*D, :, :]) = \
-                    self.LSTM_layer(output0, (h_0[k*D, :, :], c_0[k*D, :, :]), self.w_ih1[:,:D*hidden_size], self.w_hh1, self.b_ih1, self.b_hh1)
+                exec("output%s = torch.zeros(input.shape[0], input.shape[1], D * hidden_size).to(device)"%k)
+                exec("output%s[:, :, :hidden_size], (h_n[k*D, :, :], c_n[k*D, :, :]) = self.LSTM_layer(output0, (h_0[k*D, :, :], c_0[k*D, :, :]), "
+                     "self.w_ih%s, self.w_hh%s, self.b_ih%s, self.b_hh%s)"%(k,k,k,k,k))
                 if bidirectional:
-                    output1[:, :, hidden_size:], (h_n[k*D+1, :, :], c_n[k*D+1, :, :]) = \
-                        self.LSTM_layer(torch.flip(output0, [1]), (h_0[k*D+1, :, :], c_0[k*D+1, :, :]), self.w_ih_r1[:,:D*hidden_size], self.w_hh_r1, self.b_ih_r1, self.b_hh_r1)
+                    exec("output%s[:, :, hidden_size:], (h_n[k*D+1, :, :], c_n[k*D+1, :, :]) = self.LSTM_layer(torch.flip(output0, [1]), (h_0[k*D+1, :, :], c_0[k*D+1, :, :]), "
+                         "self.w_ih_r%s, self.w_hh_r%s, self.b_ih_r%s, self.b_hh_r%s)"%(k,k,k,k,k))
+                exec("output_list.append(output%s)" %k)
 
-        return output1, (h_n, c_n)
+        return output_list[-1], (h_n, c_n)
 
     def forward(self, X):
         X = self.C(X) # X : [batch_size, n_step, embeding size]
         # X = X.transpose(0, 1)  # X : [n_step, batch_size, embeding size]
         # outputs, (_, _) = self.LSTM(X, (hidden_state, cell_state))
 
-        outputs, (_, _) = self.My_LSTM(X, emb_size, n_hidden, num_layers=2)
+        outputs, (_, _) = self.My_LSTM(X, emb_size, n_hidden, num_layers=self.num_layers, bidirectional=self.bidirectional)
         outputs = outputs.transpose(0, 1) # outputs : [n_step, batch_size, num_directions(=1) * n_hidden]
         outputs = outputs[-1] # [batch_size, num_directions(=1) * n_hidden]
 
