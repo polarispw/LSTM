@@ -138,26 +138,27 @@ class TextLSTM(nn.Module):
         h_0 = torch.zeros(num_layers * D, len(input), hidden_size).to(device)
         c_0 = torch.zeros(num_layers * D, len(input), hidden_size).to(device)
 
-        output = torch.zeros(input.shape[0], input.shape[1], D * hidden_size).to(device)
+        output0 = torch.zeros(input.shape[0], input.shape[1], D * hidden_size).to(device)
+        output1 = torch.zeros(input.shape[0], input.shape[1], D * hidden_size).to(device)
                 # [num_layers, batch_size, seq_len, D*hidden_size]
         h_n = torch.zeros(num_layers * D, input.shape[0], hidden_size).to(device)
         c_n = torch.zeros(num_layers * D, input.shape[0], hidden_size).to(device)
 
         for k in range(0, num_layers):
             if k==0:
-                output[:, :, :hidden_size], (h_n[k, :, :], c_n[k, :, :]) = \
+                output0[:, :, :hidden_size], (h_n[k, :, :], c_n[k, :, :]) = \
                     self.LSTM_layer(input, (h_0[k, :, :],c_0[k, :, :]), self.w_ih0[:,:input_size], self.w_hh0, self.b_ih0, self.b_hh0)
                 if bidirectional:
-                    output[:, :, hidden_size:], (h_n[k+1, :, :], c_n[k+1, :, :]) = \
+                    output0[:, :, hidden_size:], (h_n[k+1, :, :], c_n[k+1, :, :]) = \
                         self.LSTM_layer(torch.flip(input, [1]), (h_0[k+1, :, :], c_0[k+1, :, :]), self.w_ih_r0[:,:input_size], self.w_hh_r0, self.b_ih_r0, self.b_hh_r0)
             else:
-                output[:, :, :hidden_size], (h_n[k*D, :, :], c_n[k*D, :, :]) = \
-                    self.LSTM_layer(output, (h_0[k*D, :, :], c_0[k*D, :, :]), self.w_ih1[:,:D*hidden_size], self.w_hh1, self.b_ih1, self.b_hh1)
+                output1[:, :, :hidden_size], (h_n[k*D, :, :], c_n[k*D, :, :]) = \
+                    self.LSTM_layer(output0, (h_0[k*D, :, :], c_0[k*D, :, :]), self.w_ih1[:,:D*hidden_size], self.w_hh1, self.b_ih1, self.b_hh1)
                 if bidirectional:
-                    output[:, :, hidden_size:], (h_n[k*D+1, :, :], c_n[k*D+1, :, :]) = \
-                        self.LSTM_layer(torch.flip(output, [1]), (h_0[k*D+1, :, :], c_0[k*D+1, :, :]), self.w_ih_r1[:,:D*hidden_size], self.w_hh_r1, self.b_ih_r1, self.b_hh_r1)
+                    output1[:, :, hidden_size:], (h_n[k*D+1, :, :], c_n[k*D+1, :, :]) = \
+                        self.LSTM_layer(torch.flip(output0, [1]), (h_0[k*D+1, :, :], c_0[k*D+1, :, :]), self.w_ih_r1[:,:D*hidden_size], self.w_hh_r1, self.b_ih_r1, self.b_hh_r1)
 
-        return output, (h_n, c_n)
+        return output1, (h_n, c_n)
 
     def forward(self, X):
         X = self.C(X) # X : [batch_size, n_step, embeding size]
