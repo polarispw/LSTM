@@ -64,24 +64,51 @@ def make_dict(train_path):
 
 class TextLSTM(nn.Module):
     def __init__(self):
-        super(TextLSTM, self).__init__()
+        super().__init__()
         self.C = nn.Embedding(n_class, embedding_dim=emb_size)
         # self.LSTM = nn.LSTM(input_size=emb_size, hidden_size=n_hidden)
-        self.W = nn.Linear(n_hidden, n_class, bias=False)
+        self.hidden_size = n_hidden
+        self.input_size = emb_size
+        self.bidirectional = False
+        self.D = 2 if self.bidirectional else 1
+        K = torch.sqrt(torch.tensor(1 / self.hidden_size))
+        d = max(self.D * self.hidden_size, self.input_size)
+
+        self.w_ih0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, d)), requires_grad=True)
+        self.w_hh0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, self.hidden_size)), requires_grad=True)
+        self.b_ih0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
+        self.b_hh0 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
+
+        self.w_ih1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, d)), requires_grad=True)
+        self.w_hh1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size, self.hidden_size)), requires_grad=True)
+        self.b_ih1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
+        self.b_hh1 = nn.Parameter(torch.mul(K, torch.rand(4 * self.hidden_size)), requires_grad=True)
+
+        if self.bidirectional:
+            self.w_ih_r0 = self.w_ih0
+            self.w_hh_r0 = self.w_hh0
+            self.b_ih_r0 = self.b_ih0
+            self.b_hh_r0 = self.b_hh0
+            self.w_ih_r1 = self.w_ih1
+            self.w_hh_r1 = self.w_hh1
+            self.b_ih_r1 = self.b_ih1
+            self.b_hh_r1 = self.b_hh1
+
+        self.W = nn.Linear(n_hidden, n_class, bias=False) # 如果要用双向 这里维度要修改
         self.b = nn.Parameter(torch.ones([n_class]))
 
     def LSTM_layer(self, input, initial_states, w_ih, w_hh, b_ih, b_hh):
+
         h0, c0 = initial_states
         batch_size, T, i_size = input.shape
-        h_size = w_ih.shape[0] // 4
+        h_size = self.hidden_size
         pre_h = h0
         pre_c = c0
 
         batch_w_ih = w_ih.unsqueeze(0).tile(batch_size, 1, 1)
         batch_w_hh = w_hh.unsqueeze(0).tile(batch_size, 1, 1)
 
-        output_size = h_size
-        output = torch.zeros(batch_size, T, output_size).to(device)
+        output = torch.zeros(batch_size, T, self.hidden_size).to(device)
 
         for t in range(T):
             x = input[:, t, :]
@@ -107,67 +134,40 @@ class TextLSTM(nn.Module):
         return output, (pre_h, pre_c)
 
     def My_LSTM(self, input, input_size, hidden_size, num_layers = 1, bidirectional=False):
-        D = 2 if bidirectional else 1
-
-        h_0 = torch.zeros(num_layers*D, len(input), hidden_size).to(device)
-        c_0 = torch.zeros(num_layers*D, len(input), hidden_size).to(device)
-
-        K = torch.sqrt(torch.tensor(1 / hidden_size))
-        w_ih = torch.mul(K, torch.rand(4 * hidden_size, input_size)).to(device)
-        w_hh = torch.mul(K, torch.rand(4 * hidden_size, hidden_size)).to(device)
-        b_ih = torch.mul(K, torch.rand(4 * hidden_size)).to(device)
-        b_hh = torch.mul(K, torch.rand(4 * hidden_size)).to(device)
-        w_ih.requires_grad = True
-        w_hh.requires_grad = True
-        b_ih.requires_grad = True
-        b_hh.requires_grad = True
-        if(bidirectional):
-            w_ih_r = torch.mul(K, torch.rand(4 * hidden_size, input_size)).to(device)
-            w_hh_r = torch.mul(K, torch.rand(4 * hidden_size, hidden_size)).to(device)
-            b_ih_r = torch.mul(K, torch.rand(4 * hidden_size)).to(device)
-            b_hh_r = torch.mul(K, torch.rand(4 * hidden_size)).to(device)
-            w_ih_r.requires_grad = True
-            w_hh_r.requires_grad = True
-            b_ih_r.requires_grad = True
-            b_hh_r.requires_grad = True
+        D = self.D
+        h_0 = torch.zeros(num_layers * D, len(input), hidden_size).to(device)
+        c_0 = torch.zeros(num_layers * D, len(input), hidden_size).to(device)
 
         output = torch.zeros(input.shape[0], input.shape[1], D * hidden_size).to(device)
+                # [num_layers, batch_size, seq_len, D*hidden_size]
         h_n = torch.zeros(num_layers * D, input.shape[0], hidden_size).to(device)
         c_n = torch.zeros(num_layers * D, input.shape[0], hidden_size).to(device)
 
-        if(num_layers == 1):
+        for k in range(0, num_layers):
+            if k==0:
+                output[:, :, :hidden_size], (h_n[k, :, :], c_n[k, :, :]) = \
+                    self.LSTM_layer(input, (h_0[k, :, :],c_0[k, :, :]), self.w_ih0[:,:input_size], self.w_hh0, self.b_ih0, self.b_hh0)
+                if bidirectional:
+                    output[:, :, hidden_size:], (h_n[k+1, :, :], c_n[k+1, :, :]) = \
+                        self.LSTM_layer(torch.flip(input, [1]), (h_0[k+1, :, :], c_0[k+1, :, :]), self.w_ih_r0[:,:input_size], self.w_hh_r0, self.b_ih_r0, self.b_hh_r0)
+            else:
+                output[:, :, :hidden_size], (h_n[k*D, :, :], c_n[k*D, :, :]) = \
+                    self.LSTM_layer(output, (h_0[k*D, :, :], c_0[k*D, :, :]), self.w_ih1[:,:D*hidden_size], self.w_hh1, self.b_ih1, self.b_hh1)
+                if bidirectional:
+                    output[:, :, hidden_size:], (h_n[k*D+1, :, :], c_n[k*D+1, :, :]) = \
+                        self.LSTM_layer(torch.flip(output, [1]), (h_0[k*D+1, :, :], c_0[k*D+1, :, :]), self.w_ih_r1[:,:D*hidden_size], self.w_hh_r1, self.b_ih_r1, self.b_hh_r1)
 
-            output[:, :, :hidden_size], (h_n[0, :, :], c_n[0, :, :]) = self.LSTM_layer(input, (h_0[0, :, :],c_0[0, :, :]), w_ih, w_hh, b_ih, b_hh)
-            if(D == 2):
-                output[:, :, hidden_size:], (h_n[1, :, :], c_n[1, :, :]) = self.LSTM_layer(torch.flip(input, [1]), (h_0[1, :, :], c_0[1, :, :]),
-                                                                                           w_ih_r, w_hh_r, b_ih_r, b_hh_r)
-            return output, (h_n, c_n)
-
-        else:
-            w_ih_follow = torch.mul(K, torch.rand(4 * hidden_size, D * hidden_size)).to(device)
-            w_ih_follow.reqiuires_grad = True
-
-            output, (h_n[0, :, :], c_n[0, :, :]) = self.LSTM_layer(input, (h_0[0, :, :], c_0[0, :, :]),
-                                                                   w_ih, w_hh, b_ih, b_hh)
-            if (D == 2):
-                output[:, :, hidden_size:], (h_n[1, :, :], c_n[1, :, :]) = self.LSTM_layer(torch.flip(input, [1]), (h_0[1, :, :], c_0[1, :, :]),
-                                                                                           w_ih_r, w_hh_r, b_ih_r, b_hh_r)
-            for layer in range(1, num_layers):
-                output, (h_n[layer * D, :, :], c_n[layer * D, :, :]) = self.LSTM_layer(output[:, :, : hidden_size], (h_0[layer * D, :, :], c_0[layer * D, :, :]),
-                                                                                  w_ih_follow, w_hh, b_ih, b_hh)
-                if (D == 2):
-                    output[:, :, hidden_size:], (h_n[layer * D + 1, :, :], c_n[layer * D + 1, :, :]) = \
-                        self.LSTM_layer(torch.flip(output, [1])[:, :, : hidden_size], (h_0[layer * D + 1, :, :], c_0[layer * D + 1, :, :]), w_ih_r, w_hh_r, b_ih_r, b_hh_r)
-            return output, (h_n, c_n)
+        return output, (h_n, c_n)
 
     def forward(self, X):
         X = self.C(X) # X : [batch_size, n_step, embeding size]
         # X = X.transpose(0, 1)  # X : [n_step, batch_size, embeding size]
         # outputs, (_, _) = self.LSTM(X, (hidden_state, cell_state))
 
-        outputs, (_, _) = self.My_LSTM(X, emb_size, n_hidden, bidirectional=True)
+        outputs, (_, _) = self.My_LSTM(X, emb_size, n_hidden, num_layers=2)
         outputs = outputs.transpose(0, 1) # outputs : [n_step, batch_size, num_directions(=1) * n_hidden]
         outputs = outputs[-1] # [batch_size, num_directions(=1) * n_hidden]
+
         model = self.W(outputs) + self.b # model : [batch_size, n_class]
         return model
 
@@ -188,7 +188,6 @@ def train():
 
             # input_batch : [batch_size, n_step, n_class]
             output = model(input_batch)
-
             # output : [batch_size, n_class], target_batch : [batch_size] (LongTensor, not one-hot)
             loss = criterion(output, target_batch)
             ppl = math.exp(loss.item())

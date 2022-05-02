@@ -66,9 +66,9 @@ def make_dict(train_path):
 
 class TextLSTM(nn.Module):
     def __init__(self):
-        super(TextLSTM, self).__init__()
+        super().__init__()
         self.C = nn.Embedding(n_class, embedding_dim=emb_size)
-        self.LSTM = nn.LSTM(input_size=emb_size, hidden_size=n_hidden, num_layers=2, bidirectional=True)
+        self.LSTM = nn.LSTM(input_size=emb_size, hidden_size=n_hidden, num_layers=2)
         self.W = nn.Linear(n_hidden, n_class, bias=False)
         self.b = nn.Parameter(torch.ones([n_class]))
 
